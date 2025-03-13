@@ -111,7 +111,12 @@ class TestNeuralNetModel(unittest.TestCase):
         )
 
         self.assertEqual("test", model.model_id)
+        for i in range(len(layer_sizes) - 1):
+            self.assertEqual(layer_sizes[i], len(model.weights[i][0].scalars))
+            self.assertEqual(layer_sizes[i + 1], len(model.weights[i]))
         self.assertIsNotNone(model.weight_optimizer)
+        for i in range(len(layer_sizes) - 1):
+            self.assertEqual(layer_sizes[i + 1], len(model.biases[i]))
         self.assertIsNotNone(model.bias_optimizer)
         self.assertEqual(0, len(model.progress))
         self.assertEqual(expected_buffer_size, model.training_buffer_size)
@@ -187,6 +192,13 @@ class TestNeuralNetModel(unittest.TestCase):
 
         # Deserialize and check if recorded training
         persisted_model = NeuralNetworkModel.deserialize(model.model_id)
+
+        # Verify model parameters correctly deserialized
+        for i in range(len(layer_sizes) - 1):
+            self.assertEqual(layer_sizes[i], len(persisted_model.weights[i][0].scalars))
+            self.assertEqual(layer_sizes[i + 1], len(persisted_model.weights[i]))
+        for i in range(len(layer_sizes) - 1):
+            self.assertEqual(layer_sizes[i + 1], len(persisted_model.biases[i]))
 
         persisted_weights = [[[w.value for w in wv.scalars] for wv in lw] for lw in persisted_model.weights]
         persisted_biases = [[b.value for b in lb] for lb in persisted_model.biases]
