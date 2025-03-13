@@ -35,6 +35,9 @@ class TestFunctions(unittest.TestCase):
         (func.mean_squared_error([-1, 1], [0, 1]), 1),
         (func.mean_squared_error([0, 0], [1, 0]), 1),
         (func.mean_squared_error([1.5, 1.0], [0.0, 0.7]), 2.34),
+        (func.cross_entropy_loss([0.2, 0.3, 0.5], [0.3, 0.4, 0.4]), 1.2417),
+        (func.cross_entropy_loss([-1.5, 0.2, 2.0], [0.3, 0.4, 0.4]), 8.9331),
+        (func.cross_entropy_gradient(0.2, 0.3), -0.1),
     ])
     def test_func_scalar(self, actual: float, expected: float):
         self.assertAlmostEqual(expected, actual, 4)
@@ -43,8 +46,6 @@ class TestFunctions(unittest.TestCase):
         (func.softmax([-1.5, 0.2, 2.0]), [0.0253, 0.1383, 0.8365]),
         (func.softmax([0.0, 0.0, 0.0]), [0.3333, 0.3333, 0.3333]),
         (func.softmax([1.5, 0.3, -2.0]), [0.7511, 0.2262, 0.0227]),
-        (func.softmax_cross_entropy_gradient([0.2, 0.3, 0.5], [0.3, 0.4, 0.4]), [-0.1, -0.1, 0.1]),
-        (func.softmax_cross_entropy_gradient([-1.5, 0.2, 2.0], [0.3, 0.4, 0.4]), [-0.2747, -0.2617, 0.4365]),
         (func.batch_norm([-1.5, 0.2, 2.0]), [-1.2129, -0.0233, 1.2362]),
         (func.batch_norm([0.0, 0.0, 0.0]), [0.0, 0.0, 0.0]),
         (func.apply_dropout([-1.5, 0.2, 2.0], 0.0), [-1.5, 0.2, 2.0]),

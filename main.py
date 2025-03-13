@@ -196,7 +196,7 @@ def compute_model_output(body:
                              } for idx, example in enumerate(EXAMPLES)} )):
     model = NeuralNetworkModel.deserialize(body.model_id)
     input_vector = Vector(body.input.activation_vector)
-    target_vector = Vector(body.input.target_vector)
+    target_vector = Vector(body.input.target_vector) if body.input.target_vector else None
     output_vector, cost, gradients = model.compute_output(input_vector, target_vector)
     return {"output_vector": output_vector.floats,
             "cost": cost,

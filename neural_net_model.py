@@ -6,7 +6,6 @@ import random
 from typing import Tuple
 import time
 from datetime import datetime as dt
-import functions as func
 from adam_optimizer import AdamOptimizer
 from gradients import Gradients, Scalar, Vector
 
@@ -37,7 +36,8 @@ class Neuron:
         Clears gradients that were populated after a back propagation run
         """
         self.weights.clear_gradients()
-        self.bias.gradient = None
+        self.bias.visited = False
+        self.bias.gradient = 0.0
 
     def output(self, input_vector: Vector) -> Scalar:
         """
@@ -210,6 +210,8 @@ class NeuralNetworkModel(MultiLayerPerceptron):
     def activation_algos(self, new_algos: list[str]):
         for layer, new_algo in zip(self.layers, new_algos):
             layer.activation_algo = new_algo
+            for neuron in layer.neurons:
+                neuron.activation_algo = new_algo
 
     def set_model_data(self, model_data: dict):
         self.weights = model_data["weights"]
@@ -255,17 +257,17 @@ class NeuralNetworkModel(MultiLayerPerceptron):
 
     def compute_output(self, input_vector: Vector, target_vector: Vector = None, dropout_rate=0.0) -> Tuple[Vector, float, Gradients]:
         """
-        Compute activated output and optionally also cost compared to the provided training data.
+        Compute activated output and optionally also cost compared to the provided target vector.
         :param input_vector: Input vector
         :param target_vector: Target vector (optional)
         :param dropout_rate: Fraction of neurons to drop during training for hidden layers (optional)
         :return: activation vector, cost, gradients
         """
-        activations = [input_vector]
+        activation = input_vector
         num_layers = len(self.layers)
         for l in range(num_layers):
             algo = self.activation_algos[l]
-            pre_activation: Vector = self.layers[l].output(activations[-1])
+            pre_activation: Vector = self.layers[l].output(activation)
             if algo == "relu" and l < num_layers - 1:
                 # stabilize output in hidden layers prevent overflow with ReLU activations
                 pre_activation.batch_norm()
@@ -273,25 +275,19 @@ class NeuralNetworkModel(MultiLayerPerceptron):
             if l < num_layers - 1:  # Hidden layers only
                 # Apply dropout only to hidden layers
                 activation.apply_dropout(dropout_rate)
-            activations.append(activation)
 
         cost = None
         if target_vector is not None:
-            cost_scalar: Scalar = func.mean_squared_error(activations[-1].scalars, target_vector.scalars)
+            cost_scalar: Scalar = activation.calculate_cost(target_vector)
             cost = cost_scalar.value
             # clear gradients
             self.clear_gradients()
             # back propagate to populate gradients
             cost_scalar.back_propagate()
-            # back propagate activation vectors
-            target = target_vector
-            for activation in reversed(activations):
-                activation.back_propagate(target)
-                target = activation
         # populate gradients
         gradients = Gradients(self.weights, self.biases)
 
-        return activations[-1], cost, gradients
+        return activation, cost, gradients
 
     def _train_step(self, avg_gradients: Gradients, learning_rate: float, l2_lambda: float):
         """
@@ -306,7 +302,7 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         for layer_weights, optimized_weight_step in zip(self.weights, optimized_weight_steps):
             for weight_vector, optimized_weight_gradients in zip(layer_weights, optimized_weight_step):
                 for weight_scalar, optimized_weight_gradient in zip(weight_vector.scalars, optimized_weight_gradients):
-                    weight_scalar.value += optimized_weight_gradient
+                    weight_scalar.value -= optimized_weight_gradient
         # Update weights with L2 regularization
         for layer_weights in self.weights:
             for weight_vector in layer_weights:
@@ -318,7 +314,7 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         # Update biases
         for layer_biases, optimized_bias_step in zip(self.biases, optimized_bias_steps):
             for bias_scalar, optimized_bias_gradient in zip(layer_biases, optimized_bias_step):
-                bias_scalar.value += optimized_bias_gradient
+                bias_scalar.value -= optimized_bias_gradient
 
     def train(self, training_data: list[Tuple[Vector, Vector]], epochs=100, learning_rate=0.01, decay_rate=0.9,
               dropout_rate=0.2, l2_lambda=0.001):

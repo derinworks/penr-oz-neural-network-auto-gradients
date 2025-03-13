@@ -16,16 +16,17 @@ class TestGradients(unittest.TestCase):
 
         self.assertEqual(value, scalar.value)
         self.assertEqual((), scalar.operands)
-        self.assertIsNone(scalar.gradient)
+        self.assertEqual(0.0, scalar.gradient)
 
     @parameterized.expand([
-        (Scalar(0), "Scalar(0, gradient=None)"),
-        (Scalar(1) + 1, "Summation(2.0, gradient=None)"),
-        (Scalar(1.1) * 2, "Multiplication(2.2, gradient=None)"),
-        (Scalar(2)**3, "Exponentiation(8.0, gradient=None)"),
+        (Scalar(0), "Scalar(0, gradient=0.0)"),
+        (Scalar(1) + 1, "Summation(2.0, gradient=0.0)"),
+        (Scalar(1.1) * 2, "Multiplication(2.2, gradient=0.0)"),
+        (Scalar(2)**3, "Exponentiation(8.0, gradient=0.0)"),
+        (Vector([0]), "Vector([Scalar(0, gradient=0.0)])"),
     ])
-    def test_repr_scalar(self, scalar, expected):
-        self.assertEqual(expected, str(scalar))
+    def test_repr(self, actual, expected):
+        self.assertEqual(expected, str(actual))
 
     @parameterized.expand([
         (1.0, 1.0),
@@ -36,7 +37,7 @@ class TestGradients(unittest.TestCase):
 
         self.assertEqual(value, scalar.value)
         self.assertEqual(operands, scalar.operands)
-        self.assertIsNone(scalar.gradient)
+        self.assertEqual(0.0, scalar.gradient)
 
     @parameterized.expand([
         ([0],),
@@ -48,7 +49,7 @@ class TestGradients(unittest.TestCase):
     def test_init_vector(self, values):
         vector = Vector(values)
 
-        self.assertEqual(values, vector.values)
+        self.assertEqual(len(values), len(vector.scalars))
 
     @parameterized.expand([
         (1.0, 0, 1.0),
@@ -162,8 +163,8 @@ class TestGradients(unittest.TestCase):
     def test_vector_activation(self, values, algo, expected):
         actual = Vector(values).activate(algo)
 
-        self.assertEqual(len(expected), len(actual.values))
-        for i, (e, a) in enumerate(zip(expected, actual.values)):
+        self.assertEqual(len(expected), len(actual.scalars))
+        for i, (e, a) in enumerate(zip(expected, actual.scalars)):
             self.assertAlmostEqual(e, a.value, 4, f"Elements at index {i}")
 
     def test_activation_unsupported(self):
@@ -180,7 +181,7 @@ class TestGradients(unittest.TestCase):
 
         vector.clear_gradients()
 
-        self.assertIsNone(scalar.gradient)
+        self.assertEqual(0.0, scalar.gradient)
         self.assertFalse(scalar.visited)
 
     @parameterized.expand([
@@ -194,17 +195,28 @@ class TestGradients(unittest.TestCase):
             self.assertAlmostEqual(e, a, 4, f"Element at index {i}")
 
     @parameterized.expand([
+        (Vector([-1.5, 0.2, 2.0]), [0.0, 0.5, 1.0], 3.34),
+        (Vector([-1.5, 0.2, 2.0]).activate("softmax"), [0.2, 0.3, 0.5], 1.4186),
+    ])
+    def test_vector_calculate_cost(self, vector: Vector, target: list[float], expected: float):
+        actual = vector.calculate_cost(Vector(target))
+
+        self.assertAlmostEqual(expected, actual.value, 4)
+
+    @parameterized.expand([
         (Scalar(1.0), [1.0]),
         (Scalar(1.0) + 2.0, [1.0, 1.0, 1.0]),
         (Scalar(-2.0) * 4.0, [1.0, 4.0, -2.0]),
         (Scalar(-2.0) * (Scalar(-6.0) + 10.0), [1.0, 4.0, -2.0, -2.0, -2.0]),
         (Scalar(-2.0) * (Scalar(10.0) + (Scalar(2.0) * -3)), [1.0, 4.0, -2.0, -2.0, -2.0, 6.0, -4.0]),
-        (Scalar(2)**3 + 1, [1.0, 1.0, 12.0, 1.0, 1.0]),
-        (Scalar(1.0).activate("sigmoid"), [0.1966, 1.0]),
-        ((3 * Scalar(-2) + 1).activate("relu"), [0.0, 1.0, 1.0, 3.0, -2.0, 1.0]),
-        (Scalar(1.0).activate("tanh"), [0.42, 1.0]),
+        (Scalar(2)**3 + 1, [1.0, 1.0, 12.0, 0.0, 1.0]),
+        (Scalar(1.0).activate("sigmoid"), [1.0, 0.1966]),
+        ((3 * Scalar(-2) + 1).activate("relu"), [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+        ((Scalar(2) + 1).activate("relu"), [1.0, 1.0, 1.0, 1.0]),
+        (Scalar(1.0).activate("tanh"), [1.0, 0.42]),
+        (Vector([-1.5, 0.2]).activate("softmax").calculate_cost(Vector([0.2, 0.8])), [1.0, 0.3078, -0.2922]),
     ])
-    def test_scalar_back_propagate(self, result: Scalar, expected):
+    def test_scalar_back_propagate(self, result: Scalar, expected: list[float]):
         result.back_propagate()
 
         actual = []
@@ -222,21 +234,8 @@ class TestGradients(unittest.TestCase):
             self.assertAlmostEqual(e, a, 4, f"Elements at index {i}")
 
     @parameterized.expand([
-        ([2.0, 1.0], "softmax", [0.8, 0.2], [-0.0689, 0.0689]),
-        ([2.0, 1.0, -1.0], "softmax", [0.5, 0.4, 0.1], [0.2054, -0.1405, -0.0649]),
-    ])
-    def test_vector_back_propagate(self, values, algo, target, expected):
-        actual = Vector([Scalar(value) for value in values]).activate(algo)
-
-        actual.back_propagate(Vector(target))
-
-        self.assertEqual(len(expected), len(actual.values))
-        for i, (e, a) in enumerate(zip(expected, actual.values)):
-            self.assertAlmostEqual(e, a.gradient, 4, f"Elements at index {i}")
-
-    @parameterized.expand([
         ([[Vector([Scalar(0)])]], [[Scalar(0)]], [[[0.5]]], [[0.5]]),
-        ([[Vector([Scalar(1.0).activate("tanh")])]], [[Scalar(0)]], [[[0.21]]], [[0.5]]),
+        ([[Vector([Scalar(1.0).activate("tanh")])]], [[Scalar(0)]], [[[0.5]]], [[0.5]]),
         ([[Vector([Scalar(0)] * 2)]], [[Scalar(0)] * 2], [[[0.5] * 2]], [[0.5] * 2]),
     ])
     def test_gradients_take_avg(self, weights: list[list[Vector]], biases: list[list[Scalar]],
@@ -245,7 +244,8 @@ class TestGradients(unittest.TestCase):
         gradients = Gradients(weights, biases)
         for lw in weights:
             for wv in lw:
-                wv.back_propagate()
+                for w in wv.scalars:
+                    w.gradient = 1.0
         for lb in biases:
             for b in lb:
                 b.back_propagate()

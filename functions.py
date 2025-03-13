@@ -81,18 +81,27 @@ def softmax(x: list[float]) -> list[float]:
     sum_exp_x = sum(exp_x)
     return [exp_xi / sum_exp_x for exp_xi in exp_x]
 
-def softmax_cross_entropy_gradient(x: list[float], y: list[float]) -> list[float]:
+def cross_entropy_gradient(x: float, y: float) -> float:
     """
     Compute the gradient of the cross-entropy loss with softmax for a single sample.
+    :param x: an input (pre-activation logit for a single sample).
+    :param y: an expected output (a probability value).
+    :return: Gradient of the loss with respect to the logit.
+    """
+    return x - y
+
+def cross_entropy_loss(x: list[float], y: list[float]) -> float:
+    """
+    Compute the cross-entropy loss for a single sample.
     :param x: an input (1D pre-activation logits for a single sample).
     :param y: an expected output (1D expected output, either one-hot encoded or a probability distribution).
-    :return: Gradient of the loss with respect to the logits.
+    :return: Cross entropy loss.
     """
-    # Compute softmax probabilities using softmax function
-    softmax_probs = x if sum(x) == 1.0 else softmax(x)
-    # Calculate the gradient: softmax_probs - y
-    return [softmax_prob - yi for softmax_prob, yi in zip(softmax_probs, y)]
-
+    # Clipping to avoid log(0) issues
+    eps = 1e-12
+    x = [max(min(p, 1 - eps), eps) for p in x]
+    # Compute cross-entropy loss
+    return -sum(math.log(xi) * yi for xi, yi in zip(x, y))
 
 def batch_norm(x: list[float], epsilon=1e-5):
     """

@@ -16,7 +16,7 @@ class TestNeuralNetModel(unittest.TestCase):
         neuron = Neuron(input_size, weight_algo, bias_algo, activation_algo)
 
         self.assertIsNotNone(neuron)
-        self.assertEqual(input_size, len(neuron.weights.values))
+        self.assertEqual(input_size, len(neuron.weights.scalars))
         self.assertIsNotNone(neuron.bias)
         self.assertEqual(activation_algo, neuron.activation_algo)
 
@@ -26,7 +26,7 @@ class TestNeuralNetModel(unittest.TestCase):
 
         neuron.clear_gradients()
 
-        self.assertIsNone(neuron.bias.gradient)
+        self.assertEqual(0.0, neuron.bias.gradient)
 
     def test_neuron_activate(self):
         neuron = Neuron(2)
@@ -35,7 +35,7 @@ class TestNeuralNetModel(unittest.TestCase):
         activated_scalar: Scalar = neuron.activate(input_vector)
 
         self.assertIsNotNone(activated_scalar.value)
-        self.assertIsNone(activated_scalar.gradient)
+        self.assertEqual(0.0, activated_scalar.gradient)
 
     @parameterized.expand([
         (9, 9,),
@@ -47,7 +47,7 @@ class TestNeuralNetModel(unittest.TestCase):
 
         self.assertIsNotNone(layer)
         self.assertEqual(output_size, len(layer.neurons))
-        self.assertEqual(input_size, len(layer.neurons[0].weights.values))
+        self.assertEqual(input_size, len(layer.neurons[0].weights.scalars))
 
     def test_layer_clear_gradients(self):
         layer = Layer(1, 1)
@@ -55,7 +55,7 @@ class TestNeuralNetModel(unittest.TestCase):
 
         layer.clear_gradients()
 
-        self.assertIsNone(layer.neurons[0].bias.gradient)
+        self.assertEqual(0.0, layer.neurons[0].bias.gradient)
 
     def test_layer_activate(self):
         layer = Layer(2, 4)
@@ -63,8 +63,8 @@ class TestNeuralNetModel(unittest.TestCase):
 
         activated_vector: Vector = layer.activate(input_vector)
 
-        self.assertEqual(4, len(activated_vector.values))
-        self.assertListEqual([None] * 4, [value.gradient for value in activated_vector.values])
+        self.assertEqual(4, len(activated_vector.scalars))
+        self.assertListEqual([0.0] * 4, [value.gradient for value in activated_vector.scalars])
 
     @parameterized.expand([
         ([9, 9, 9], "xavier", "random",),
@@ -85,7 +85,7 @@ class TestNeuralNetModel(unittest.TestCase):
 
         multi_layer_perceptron.clear_gradients()
 
-        self.assertIsNone(multi_layer_perceptron.layers[0].neurons[0].bias.gradient)
+        self.assertEqual(0.0, multi_layer_perceptron.layers[0].neurons[0].bias.gradient)
 
     def test_multi_layer_perceptron_activate(self):
         multi_layer_perceptron = MultiLayerPerceptron([2, 4, 2])
@@ -93,8 +93,8 @@ class TestNeuralNetModel(unittest.TestCase):
 
         activated_vector: Vector = multi_layer_perceptron.activate(input_vector)
 
-        self.assertEqual(2, len(activated_vector.values))
-        self.assertListEqual([None] * 2, [value.gradient for value in activated_vector.values])
+        self.assertEqual(2, len(activated_vector.scalars))
+        self.assertListEqual([0.0] * 2, [value.gradient for value in activated_vector.scalars])
 
     @parameterized.expand([
         ([9, 9, 9], "xavier", "random",),
@@ -134,7 +134,7 @@ class TestNeuralNetModel(unittest.TestCase):
 
         output, cost, gradients = model.compute_output(sample_input)
 
-        self.assertEqual(output_sizes[-1], len(output.values))
+        self.assertEqual(output_sizes[-1], len(output.scalars))
         self.assertIsNone(cost)
         self.assertIsNotNone(gradients)
         self.assertEqual(num_layers, len(gradients.wrt_weights))
@@ -160,7 +160,7 @@ class TestNeuralNetModel(unittest.TestCase):
         output_sizes = layer_sizes[1:]
         sample_input = Vector([0.5] * input_sizes[0])
         sample_target = Vector([0.0] * output_sizes[0])
-        sample_target.values[0] = 1.0
+        sample_target.scalars[0] = Scalar(1.0)
 
         initial_weights = [[[w.value for w in wv.scalars] for wv in lw] for lw in model.weights]
         initial_biases = [[b.value for b in lb] for lb in model.biases]
@@ -182,7 +182,7 @@ class TestNeuralNetModel(unittest.TestCase):
 
         # Ensure training progress
         self.assertGreater(len(model.progress), 0)
-        # self.assertLess(min([progress["cost"] for progress in model.progress]), initial_cost)
+        self.assertNotEqual(model.progress[0]["cost"], initial_cost)
         self.assertEqual(len(model.training_data_buffer), 0)
 
         # Deserialize and check if recorded training
