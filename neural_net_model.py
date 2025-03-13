@@ -185,7 +185,7 @@ class NeuralNetworkModel(MultiLayerPerceptron):
     
     def get_model_data(self) -> dict:
         return {
-            "weights": [[[w.value for w in wv.scalars] for wv in lwv] for lwv in self.weights],
+            "weights": [[wv.floats for wv in lwv] for lwv in self.weights],
             "weight_optimizer_state": self.weight_optimizer.state,
             "biases": [[b.value for b in lb] for lb in self.biases],
             "bias_optimizer_state": self.bias_optimizer.state,
@@ -241,7 +241,7 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         except FileNotFoundError as e:
             log.error(f"File not found error occurred: {str(e)}")
             raise KeyError(f"Model {model_id} not created yet.")
-        layer_sizes = [len(model_data["weights"][0])] + [len(w[0]) for w in model_data["weights"]]
+        layer_sizes = [len(model_data["weights"][0][0])] + [len(w) for w in model_data["weights"]]
         model = cls(model_id, layer_sizes)
         model.set_model_data(model_data)
         return model
