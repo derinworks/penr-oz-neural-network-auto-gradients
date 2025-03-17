@@ -1,4 +1,5 @@
 import functions as func
+from adam_optimizer import AdamOptimizer
 from typing import Tuple
 
 class Scalar:
@@ -12,6 +13,9 @@ class Scalar:
         self.operands: Tuple[Scalar, ...] = operands
         self.gradient = 0.0
         self.visited = False
+        self.gradient_overall = None
+        self.gradient_optimized = None
+        self.adam_optimizer = AdamOptimizer()
 
     def __repr__(self):
         return f"{type(self).__name__}({self.value}, gradient={self.gradient})"
@@ -76,20 +80,40 @@ class Scalar:
     def _compute_gradient(self):
         pass
 
-    def _back_propagate(self):
+    def _aggregate_gradient(self):
+        if self.gradient_overall is None:
+            self.gradient_overall = self.gradient
+        else:
+            alpha = 1.0 / (self.adam_optimizer.t + 2)
+            self.gradient_overall = alpha * self.gradient_overall + (1 - alpha) * self.gradient
+
+    def _optimize_gradient(self, learning_rate: float):
+        self.gradient_optimized = self.adam_optimizer.step(self.gradient_overall, learning_rate)
+
+    def _back_propagate(self, learning_rate: float):
         if not self.visited:
             self.visited = True
             self._compute_gradient()
+            self._aggregate_gradient()
+            self._optimize_gradient(learning_rate)
             for operand in self.operands:
-                operand._back_propagate()
+                operand._back_propagate(learning_rate)
 
-    def back_propagate(self, top_gradient = 1.0):
+    def back_propagate(self, top_gradient = 1.0, learning_rate = 0.1):
         """
         Applies back propagation to compute gradient of this and the previous operand scalars
         :param top_gradient: top gradient value to start with (default: 1.0)
+        :param learning_rate: Learning rate for gradient descent.
         """
         self.gradient = top_gradient
-        self._back_propagate()
+        self._back_propagate(learning_rate)
+
+    def clear_gradient(self):
+        if self.visited or self.gradient != 0.0:
+            self.visited = False
+            self.gradient = 0.0
+            for operand in self.operands:
+                operand.clear_gradient()
 
 class Summation(Scalar):
     def __init__(self, left_addend: Scalar, right_addend: Scalar):
@@ -196,8 +220,7 @@ class Vector:
         Clears gradients that were populated after a back propagation run
         """
         for scalar in self.scalars:
-            scalar.gradient = 0.0
-            scalar.visited = False
+            scalar.clear_gradient()
 
     def dot(self, other):
         """
@@ -266,31 +289,3 @@ class SoftmaxActivation(Vector):
         :return: cost between this and target
         """
         return CrossEntropyLoss(self.scalars, target.floats)
-
-class Gradients:
-    def __init__(self, weights: list[list[Vector]], biases: list[list[Scalar]]):
-        """
-        Initialize gradients from given weights and biases
-        :param weights: list of weights
-        :param biases: list of biases
-        """
-        self.wrt_weights = [[[w.gradient for w in wv.scalars] for wv in lwv] for lwv in weights]
-        self.wrt_biases = [[b.gradient for b in lb] for lb in biases]
-
-    @classmethod
-    def _take_avg(cls, gv: list[float], ogv: list[float], alpha: float):
-        for i, (g, og) in enumerate(zip(gv, ogv)):
-            gv[i] = alpha * g + (1 - alpha) * og
-
-    def take_avg(self, other, alpha = 0.5):
-        """
-        Take average of these gradients with other gradients and update these
-        :param other: other gradients
-        :param alpha: influence of these gradients vs others during averaging
-        """
-        for lg, olg in zip(self.wrt_weights, other.wrt_weights):
-            for gv, ogv in zip(lg, olg):
-                self._take_avg(gv, ogv, alpha)
-
-        for gv, ogv in zip(self.wrt_biases, other.wrt_biases):
-            self._take_avg(gv, ogv, alpha)

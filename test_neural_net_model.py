@@ -112,12 +112,8 @@ class TestNeuralNetModel(unittest.TestCase):
 
         self.assertEqual("test", model.model_id)
         for i in range(len(layer_sizes) - 1):
-            self.assertEqual(layer_sizes[i], len(model.weights[i][0].scalars))
-            self.assertEqual(layer_sizes[i + 1], len(model.weights[i]))
-        self.assertIsNotNone(model.weight_optimizer)
-        for i in range(len(layer_sizes) - 1):
-            self.assertEqual(layer_sizes[i + 1], len(model.biases[i]))
-        self.assertIsNotNone(model.bias_optimizer)
+            self.assertEqual(layer_sizes[i], len(model.layers[i].neurons[0].weights.floats))
+            self.assertEqual(layer_sizes[i + 1], len(model.layers[i].neurons))
         self.assertEqual(0, len(model.progress))
         self.assertEqual(expected_buffer_size, model.training_buffer_size)
         self.assertGreater(model.training_sample_size, 0)
@@ -135,18 +131,11 @@ class TestNeuralNetModel(unittest.TestCase):
         input_sizes = layer_sizes[:-1]
         output_sizes = layer_sizes[1:]
         sample_input = Vector([0.5] * input_sizes[0])
-        num_layers = len(layer_sizes) - 1
 
-        output, cost, gradients = model.compute_output(sample_input)
+        output, cost = model.compute_output(sample_input)
 
         self.assertEqual(output_sizes[-1], len(output.scalars))
         self.assertIsNone(cost)
-        self.assertIsNotNone(gradients)
-        self.assertEqual(num_layers, len(gradients.wrt_weights))
-        self.assertEqual(num_layers, len(gradients.wrt_biases))
-        for in_sz, out_sz, gw, gb in zip(input_sizes, output_sizes, gradients.wrt_weights, gradients.wrt_biases):
-            self.assertListEqual([[0] * in_sz] * out_sz, gw)
-            self.assertListEqual([0] * out_sz, gb)
 
     @parameterized.expand([
         ([9, 9, 9], ["sigmoid"] * 2,),
@@ -161,22 +150,20 @@ class TestNeuralNetModel(unittest.TestCase):
     ])
     def test_train(self, layer_sizes: list[int], algos: list[str]):
         model = NeuralNetworkModel("test", layer_sizes, activation_algos=algos)
-        input_sizes = layer_sizes[:-1]
-        output_sizes = layer_sizes[1:]
-        sample_input = Vector([0.5] * input_sizes[0])
-        sample_target = Vector([0.0] * output_sizes[0])
+        sample_input = Vector([0.5] * layer_sizes[0])
+        sample_target = Vector([0.0] * layer_sizes[-1])
         sample_target.scalars[0] = Scalar(1.0)
 
-        initial_weights = [[[w.value for w in wv.scalars] for wv in lw] for lw in model.weights]
-        initial_biases = [[b.value for b in lb] for lb in model.biases]
-        _, initial_cost, _ = model.compute_output(sample_input, sample_target)
+        initial_weights = [[[w.value for w in n.weights.scalars] for n in l.neurons] for l in model.layers]
+        initial_biases = [[n.bias.value for n in l.neurons] for l in model.layers]
+        _, initial_cost = model.compute_output(sample_input, sample_target)
         # Add enough data to meet the training buffer size
         training_data = [(sample_input, sample_target)] * model.training_buffer_size
 
         model.train(training_data, epochs=1)
 
-        updated_weights = [[[w.value for w in wv.scalars] for wv in lw] for lw in model.weights]
-        updated_biases = [[b.value for b in lb] for lb in model.biases]
+        updated_weights = [[[w.value for w in n.weights.scalars] for n in l.neurons] for l in model.layers]
+        updated_biases = [[n.bias.value for n in l.neurons] for l in model.layers]
 
         # Check that the model data is still valid
         self.assertEqual(len(initial_weights), len(updated_weights))
@@ -195,13 +182,11 @@ class TestNeuralNetModel(unittest.TestCase):
 
         # Verify model parameters correctly deserialized
         for i in range(len(layer_sizes) - 1):
-            self.assertEqual(layer_sizes[i], len(persisted_model.weights[i][0].scalars))
-            self.assertEqual(layer_sizes[i + 1], len(persisted_model.weights[i]))
-        for i in range(len(layer_sizes) - 1):
-            self.assertEqual(layer_sizes[i + 1], len(persisted_model.biases[i]))
+            self.assertEqual(layer_sizes[i], len(persisted_model.layers[i].neurons[0].weights.floats))
+            self.assertEqual(layer_sizes[i + 1], len(persisted_model.layers[i].neurons))
 
-        persisted_weights = [[[w.value for w in wv.scalars] for wv in lw] for lw in persisted_model.weights]
-        persisted_biases = [[b.value for b in lb] for lb in persisted_model.biases]
+        persisted_weights = [[[w for w in n.weights.floats] for n in l.neurons] for l in persisted_model.layers]
+        persisted_biases = [[n.bias.value for n in l.neurons] for l in persisted_model.layers]
 
         self.assertEqual(len(updated_weights), len(persisted_weights))
         for i, (uwl, pwl) in enumerate(zip(updated_weights, persisted_weights)):

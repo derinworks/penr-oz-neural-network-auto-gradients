@@ -6,8 +6,7 @@ import random
 from typing import Tuple
 import time
 from datetime import datetime as dt
-from adam_optimizer import AdamOptimizer
-from gradients import Gradients, Scalar, Vector
+from gradients import Scalar, Vector
 
 log = logging.getLogger(__name__)
 
@@ -68,14 +67,6 @@ class Layer:
         self.neurons = [Neuron(input_size, weight_algo, bias_algo, activation_algo)
                         for _ in range(output_size)]
         self.activation_algo = activation_algo
-
-    @property
-    def weights(self) -> list[Vector]:
-        return [n.weights for n in self.neurons]
-
-    @property
-    def biases(self) -> list[Scalar]:
-        return [n.bias for n in self.neurons]
 
     def clear_gradients(self):
         """
@@ -153,8 +144,6 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         """
         super().__init__(layer_sizes, weight_algo, bias_algo, activation_algos)
         self.model_id = model_id
-        self.weight_optimizer = AdamOptimizer()
-        self.bias_optimizer = AdamOptimizer()
         self.progress = []
         self.training_data_buffer: list[Tuple[Vector, Vector]] = []
         self.training_buffer_size = self._calculate_buffer_size(layer_sizes)
@@ -171,54 +160,47 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         )
         return total_params  # Buffer size is equal to total parameters
 
-    @property
-    def weights(self) -> list[list[Vector]]:
-        return [l.weights for l in self.layers]
+    @classmethod
+    def _get_scalar_state(cls, scalar: Scalar) -> dict:
+        return {
+            "val": scalar.value,
+            "grad": scalar.gradient_overall,
+            "step": scalar.gradient_optimized,
+            "time": scalar.adam_optimizer.t,
+            "mean": scalar.adam_optimizer.m,
+            "var": scalar.adam_optimizer.v
+        }
 
-    @property
-    def biases(self) -> list[list[Scalar]]:
-        return [l.biases for l in self.layers]
-    
-    @property
-    def activation_algos(self) -> list[str]:
-        return [l.activation_algo for l in self.layers]
-    
+    @classmethod
+    def _get_scalar(cls, state: dict) -> Scalar:
+        scalar = Scalar(state["val"])
+        scalar.gradient_overall = state["grad"]
+        scalar.adam_optimizer.t = state["time"]
+        scalar.adam_optimizer.m = state["mean"]
+        scalar.adam_optimizer.v = state["var"]
+        return scalar
+
     def get_model_data(self) -> dict:
         return {
-            "weights": [[wv.floats for wv in lwv] for lwv in self.weights],
-            "weight_optimizer_state": self.weight_optimizer.state,
-            "biases": [[b.value for b in lb] for lb in self.biases],
-            "bias_optimizer_state": self.bias_optimizer.state,
-            "activation_algos": self.activation_algos,
+            "layers": [{
+                "algo": l.activation_algo,
+                "neurons": [{
+                    "weights": [self._get_scalar_state(w) for w in n.weights.scalars],
+                    "bias": self._get_scalar_state(n.bias)
+                } for n in l.neurons]
+            } for l in self.layers],
             "progress": self.progress,
             "training_data_buffer": [tuple(tv.floats for tv in ttv) for ttv in self.training_data_buffer],
         }
 
-    @weights.setter
-    def weights(self, new_weights: list[list[list[float]]]):
-        for layer, new_layer_weights in zip(self.layers, new_weights):
-            for neuron, new_neuron_weights in zip(layer.neurons, new_layer_weights):
-                neuron.weights = Vector(new_neuron_weights)
-
-    @biases.setter
-    def biases(self, new_biases: list[list[float]]):
-        for layer, new_layer_biases in zip(self.layers, new_biases):
-            for neuron, new_neuron_bias in zip(layer.neurons, new_layer_biases):
-                neuron.bias = Scalar(new_neuron_bias)
-
-    @activation_algos.setter
-    def activation_algos(self, new_algos: list[str]):
-        for layer, new_algo in zip(self.layers, new_algos):
-            layer.activation_algo = new_algo
-            for neuron in layer.neurons:
-                neuron.activation_algo = new_algo
-
     def set_model_data(self, model_data: dict):
-        self.weights = model_data["weights"]
-        self.weight_optimizer.state = model_data["weight_optimizer_state"]
-        self.biases = model_data["biases"]
-        self.bias_optimizer.state = model_data["bias_optimizer_state"]
-        self.activation_algos = model_data["activation_algos"]
+        for layer, layer_state in zip(self.layers, model_data["layers"]):
+            layer.activation_algo = layer_state["algo"]
+            for neuron, neuron_state in zip(layer.neurons, layer_state["neurons"]):
+                neuron.activation_algo = layer_state["algo"]
+                neuron.weights = Vector([self._get_scalar(w) for w in neuron_state["weights"]])
+                neuron.bias = self._get_scalar(neuron_state["bias"])
+
         self.progress = model_data["progress"]
         self.training_data_buffer = [tuple(Vector(t) for t in tt) for tt in model_data["training_data_buffer"]]
 
@@ -241,7 +223,9 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         except FileNotFoundError as e:
             log.error(f"File not found error occurred: {str(e)}")
             raise KeyError(f"Model {model_id} not created yet.")
-        layer_sizes = [len(model_data["weights"][0][0])] + [len(w) for w in model_data["weights"]]
+        layer_state = model_data["layers"]
+        input_size = len(layer_state[0]["neurons"][0]["weights"])
+        layer_sizes = [input_size] + [len(l["neurons"]) for l in layer_state]
         model = cls(model_id, layer_sizes)
         model.set_model_data(model_data)
         return model
@@ -255,7 +239,7 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         except FileNotFoundError as e:
             log.warning(f"Failed to delete: {str(e)}")
 
-    def compute_output(self, input_vector: Vector, target_vector: Vector = None, dropout_rate=0.0) -> Tuple[Vector, float, Gradients]:
+    def compute_output(self, input_vector: Vector, target_vector: Vector = None, dropout_rate=0.0) -> Tuple[Vector, Scalar | None]:
         """
         Compute activated output and optionally also cost compared to the provided target vector.
         :param input_vector: Input vector
@@ -266,7 +250,7 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         activation = input_vector
         num_layers = len(self.layers)
         for l in range(num_layers):
-            algo = self.activation_algos[l]
+            algo = self.layers[l].activation_algo
             pre_activation: Vector = self.layers[l].output(activation)
             if algo == "relu" and l < num_layers - 1:
                 # stabilize output in hidden layers prevent overflow with ReLU activations
@@ -279,42 +263,9 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         cost = None
         if target_vector is not None:
             cost_scalar: Scalar = activation.calculate_cost(target_vector)
-            cost = cost_scalar.value
-            # clear gradients
-            self.clear_gradients()
-            # back propagate to populate gradients
-            cost_scalar.back_propagate()
-        # populate gradients
-        gradients = Gradients(self.weights, self.biases)
+            cost = cost_scalar
 
-        return activation, cost, gradients
-
-    def _train_step(self, avg_gradients: Gradients, learning_rate: float, l2_lambda: float):
-        """
-        Update the weights and biases of the neural network using the averaged cost derivatives.
-        :param avg_gradients: Averaged gradients with respect to weights and biases
-        :param learning_rate: Learning rate for gradient descent.
-        :param l2_lambda: L2 regularization strength.
-        """
-        # Optimize weight gradients
-        optimized_weight_steps = self.weight_optimizer.step(avg_gradients.wrt_weights, learning_rate)
-        # Update weights by optimized gradients
-        for layer_weights, optimized_weight_step in zip(self.weights, optimized_weight_steps):
-            for weight_vector, optimized_weight_gradients in zip(layer_weights, optimized_weight_step):
-                for weight_scalar, optimized_weight_gradient in zip(weight_vector.scalars, optimized_weight_gradients):
-                    weight_scalar.value -= optimized_weight_gradient
-        # Update weights with L2 regularization
-        for layer_weights in self.weights:
-            for weight_vector in layer_weights:
-                for weight_scalar in weight_vector.scalars:
-                    l2_penalty = l2_lambda * weight_scalar.value
-                    weight_scalar.value -= l2_penalty
-        # Optimize bias gradients
-        optimized_bias_steps = self.bias_optimizer.step(avg_gradients.wrt_biases, learning_rate)
-        # Update biases
-        for layer_biases, optimized_bias_step in zip(self.biases, optimized_bias_steps):
-            for bias_scalar, optimized_bias_gradient in zip(layer_biases, optimized_bias_step):
-                bias_scalar.value -= optimized_bias_gradient
+        return activation, cost
 
     def train(self, training_data: list[Tuple[Vector, Vector]], epochs=100, learning_rate=0.01, decay_rate=0.9,
               dropout_rate=0.2, l2_lambda=0.001):
@@ -348,23 +299,35 @@ class NeuralNetworkModel(MultiLayerPerceptron):
             random.shuffle(training_data)
             training_data_sample = training_data[:self.training_sample_size]
 
-            # Calculate total cost and average gradients
-            avg_gradients = Gradients(self.weights, self.biases)
-            total_cost = 0
-            for i, (input_vector, target_vector) in enumerate(training_data_sample):
-                _, cost, gradients = self.compute_output(input_vector, target_vector, dropout_rate)
-                total_cost += cost
-                avg_gradients.take_avg(gradients, 1.0 / (i + 2))
-
-            # Update weights and biases
+            # decay learning rate
             current_learning_rate = learning_rate * (decay_rate ** epoch)
-            self._train_step(avg_gradients, current_learning_rate, l2_lambda)
+
+            # Calculate cost and populate gradients
+            avg_cost = None
+            for i, (input_vector, target_vector) in enumerate(training_data_sample):
+                _, cost = self.compute_output(input_vector, target_vector, dropout_rate)
+                # clear gradients
+                self.clear_gradients()
+                # back propagate to populate gradients
+                cost.back_propagate(learning_rate=current_learning_rate)
+                # calculate average cost
+                alpha = 1.0 / (i + 2)
+                avg_cost = alpha * (avg_cost or cost.value) + (1 - alpha) * cost.value
+
+            # apply gradient descent
+            for l in self.layers:
+                for n in l.neurons:
+                    n.bias.value -= n.bias.gradient_optimized
+                    for w in n.weights.scalars:
+                        w.value -= w.gradient_optimized
+                        # Update weight with L2 regularization
+                        w.value *= (1.0 - l2_lambda)
 
             # Record progress
             self.progress.append({
                 "dt": dt.now().isoformat(),
                 "epoch": epoch + 1,
-                "cost": total_cost / len(training_data_sample)
+                "cost": avg_cost
             })
             last_progress = self.progress[-1]
             print(f"Model {self.model_id}: {last_progress["dt"]} - Epoch {last_progress["epoch"]}, "
