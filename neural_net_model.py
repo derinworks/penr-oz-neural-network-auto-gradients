@@ -164,20 +164,17 @@ class NeuralNetworkModel(MultiLayerPerceptron):
     def _get_scalar_state(cls, scalar: Scalar) -> dict:
         return {
             "val": scalar.value,
-            "grad": scalar.gradient_overall,
-            "step": scalar.gradient_optimized,
-            "time": scalar.adam_optimizer.t,
-            "mean": scalar.adam_optimizer.m,
-            "var": scalar.adam_optimizer.v
+            "t": scalar.adam_optimizer.t,
+            "m": scalar.adam_optimizer.m,
+            "v": scalar.adam_optimizer.v
         }
 
     @classmethod
     def _get_scalar(cls, state: dict) -> Scalar:
         scalar = Scalar(state["val"])
-        scalar.gradient_overall = state["grad"]
-        scalar.adam_optimizer.t = state["time"]
-        scalar.adam_optimizer.m = state["mean"]
-        scalar.adam_optimizer.v = state["var"]
+        scalar.adam_optimizer.t = state["t"]
+        scalar.adam_optimizer.m = state["m"]
+        scalar.adam_optimizer.v = state["v"]
         return scalar
 
     def get_model_data(self) -> dict:
@@ -308,10 +305,11 @@ class NeuralNetworkModel(MultiLayerPerceptron):
                 _, cost = self.compute_output(input_vector, target_vector, dropout_rate)
                 # clear gradients
                 self.clear_gradients()
-                # back propagate to populate gradients
-                cost.back_propagate(learning_rate=current_learning_rate)
-                # calculate average cost
+                # calculate contribution factor for averaging
                 alpha = 1.0 / (i + 2)
+                # back propagate to populate gradients
+                cost.back_propagate(alpha, current_learning_rate)
+                # calculate average cost
                 avg_cost = alpha * (avg_cost or cost.value) + (1 - alpha) * cost.value
 
             # apply gradient descent

@@ -80,33 +80,29 @@ class Scalar:
     def _compute_gradient(self):
         pass
 
-    def _aggregate_gradient(self):
-        if self.gradient_overall is None:
-            self.gradient_overall = self.gradient
-        else:
-            alpha = 1.0 / (self.adam_optimizer.t + 2)
-            self.gradient_overall = alpha * self.gradient_overall + (1 - alpha) * self.gradient
+    def _aggregate_gradient(self, alpha: float):
+        self.gradient_overall = alpha * (self.gradient_overall or self.gradient) + (1 - alpha) * self.gradient
 
     def _optimize_gradient(self, learning_rate: float):
         self.gradient_optimized = self.adam_optimizer.step(self.gradient_overall, learning_rate)
 
-    def _back_propagate(self, learning_rate: float):
+    def _back_propagate(self, alpha: float, learning_rate: float):
         if not self.visited:
             self.visited = True
             self._compute_gradient()
-            self._aggregate_gradient()
+            self._aggregate_gradient(alpha)
             self._optimize_gradient(learning_rate)
             for operand in self.operands:
-                operand._back_propagate(learning_rate)
+                operand._back_propagate(alpha, learning_rate)
 
-    def back_propagate(self, top_gradient = 1.0, learning_rate = 0.1):
+    def back_propagate(self, alpha = 0.5, learning_rate = 0.1):
         """
         Applies back propagation to compute gradient of this and the previous operand scalars
-        :param top_gradient: top gradient value to start with (default: 1.0)
+        :param alpha: contribution factor of the current gradient to overall
         :param learning_rate: Learning rate for gradient descent.
         """
-        self.gradient = top_gradient
-        self._back_propagate(learning_rate)
+        self.gradient = 1.0
+        self._back_propagate(alpha, learning_rate)
 
     def clear_gradient(self):
         if self.visited or self.gradient != 0.0:
