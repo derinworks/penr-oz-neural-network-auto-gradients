@@ -1,6 +1,6 @@
 import unittest
 from parameterized import parameterized
-from gradients import Scalar, Vector, Gradients
+from gradients import Scalar, Vector
 
 class TestGradients(unittest.TestCase):
 
@@ -17,6 +17,9 @@ class TestGradients(unittest.TestCase):
         self.assertEqual(value, scalar.value)
         self.assertEqual((), scalar.operands)
         self.assertEqual(0.0, scalar.gradient)
+        self.assertIsNone(scalar.gradient_overall)
+        self.assertIsNotNone(scalar.adam_optimizer)
+        self.assertIsNone(scalar.gradient_optimized)
 
     @parameterized.expand([
         (Scalar(0), "Scalar(0, gradient=0.0)"),
@@ -29,6 +32,7 @@ class TestGradients(unittest.TestCase):
         self.assertEqual(expected, str(actual))
 
     @parameterized.expand([
+        (1, ()),
         (1.0, 1.0),
         (1.0, (.5, .5))
     ])
@@ -37,7 +41,6 @@ class TestGradients(unittest.TestCase):
 
         self.assertEqual(value, scalar.value)
         self.assertEqual(operands, scalar.operands)
-        self.assertEqual(0.0, scalar.gradient)
 
     @parameterized.expand([
         ([0],),
@@ -175,14 +178,18 @@ class TestGradients(unittest.TestCase):
 
     def test_clear_gradients(self):
         scalar = Scalar(1.0)
-        scalar.gradient = 1.0
         scalar.visited = True
+        scalar.gradient = 1.0
+        scalar.gradient_overall = 1.0
+        scalar.gradient_optimized = 0.1
         vector = Vector([scalar])
 
         vector.clear_gradients()
 
-        self.assertEqual(0.0, scalar.gradient)
         self.assertFalse(scalar.visited)
+        self.assertEqual(0.0, scalar.gradient)
+        self.assertEqual(1.0, scalar.gradient_overall)
+        self.assertEqual(0.1, scalar.gradient_optimized)
 
     @parameterized.expand([
         (Vector([-1.5, 0.2, 2.0]).batch_norm(), [-1.2129, -0.0233, 1.2362]),
@@ -217,51 +224,29 @@ class TestGradients(unittest.TestCase):
         (Vector([-1.5, 0.2]).activate("softmax").calculate_cost(Vector([0.2, 0.8])), [1.0, 0.3078, -0.2922]),
     ])
     def test_scalar_back_propagate(self, result: Scalar, expected: list[float]):
-        result.back_propagate()
-
-        actual = []
+        actual: list[Scalar] = []
         scalar_set = set()
         def dfs(scalar):
             if scalar not in scalar_set:
                 scalar_set.add(scalar)
-                actual.append(scalar.gradient)
+                actual.append(scalar)
                 for operand in scalar.operands:
                     dfs(operand)
         dfs(result)
 
+        result.back_propagate()
+
         self.assertEqual(len(expected), len(actual))
         for i, (e, a) in enumerate(zip(expected, actual)):
-            self.assertAlmostEqual(e, a, 4, f"Elements at index {i}")
+            self.assertAlmostEqual(e, a.gradient, 4, f"Element at index {i}")
+            self.assertAlmostEqual(e, a.gradient_overall, 4, f"Element at index {i}")
+            self.assertGreaterEqual(e * a.gradient_optimized, 0) # same sign
 
-    @parameterized.expand([
-        ([[Vector([Scalar(0)])]], [[Scalar(0)]], [[[0.5]]], [[0.5]]),
-        ([[Vector([Scalar(1.0).activate("tanh")])]], [[Scalar(0)]], [[[0.5]]], [[0.5]]),
-        ([[Vector([Scalar(0)] * 2)]], [[Scalar(0)] * 2], [[[0.5] * 2]], [[0.5] * 2]),
-    ])
-    def test_gradients_take_avg(self, weights: list[list[Vector]], biases: list[list[Scalar]],
-                                expected_wrt_weights: list[list[list[float]]],
-                                expected_wrt_biases: list[list[float]]):
-        gradients = Gradients(weights, biases)
-        for lw in weights:
-            for wv in lw:
-                for w in wv.scalars:
-                    w.gradient = 1.0
-        for lb in biases:
-            for b in lb:
-                b.back_propagate()
-        other = Gradients(weights, biases)
-        gradients.take_avg(other)
-
-        self.assertEqual(len(expected_wrt_weights), len(gradients.wrt_weights))
-        for i, (el, al) in enumerate(zip(expected_wrt_weights, gradients.wrt_weights)):
-            for j, (ev, av) in enumerate(zip(el, al)):
-                for k, (e, a) in enumerate(zip(ev, av)):
-                    self.assertAlmostEqual(e, a, 4, f"Elements at loc {i},{j},{k}")
-
-        self.assertEqual(len(expected_wrt_biases), len(gradients.wrt_biases))
-        for i, (el, al) in enumerate(zip(expected_wrt_biases, gradients.wrt_biases)):
-            for j, (e, a) in enumerate(zip(el, al)):
-                self.assertAlmostEqual(e, a, 4, f"Elements at loc {i},{j}")
+        result.clear_gradient()
+        result.back_propagate()
+        for i, (e, a) in enumerate(zip(expected, actual)):
+            self.assertAlmostEqual(e, a.gradient, 4, f"Element at index {i}")
+            self.assertAlmostEqual(e, a.gradient_overall, 4, f"Element at index {i}")
 
 if __name__ == "__main__":
     unittest.main()

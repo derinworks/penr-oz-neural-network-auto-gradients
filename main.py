@@ -197,11 +197,9 @@ def compute_model_output(body:
     model = NeuralNetworkModel.deserialize(body.model_id)
     input_vector = Vector(body.input.activation_vector)
     target_vector = Vector(body.input.target_vector) if body.input.target_vector else None
-    output_vector, cost, gradients = model.compute_output(input_vector, target_vector)
+    output_vector, cost = model.compute_output(input_vector, target_vector)
     return {"output_vector": output_vector.floats,
-            "cost": cost,
-            "cost_derivative_wrt_weights": gradients.wrt_weights,
-            "cost_derivative_wrt_biases": gradients.wrt_biases,
+            "cost": cost.value if cost else None,
             }
 
 
