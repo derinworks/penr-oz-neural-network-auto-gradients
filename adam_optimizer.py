@@ -6,34 +6,27 @@ class AdamOptimizer:
         self.m = 0.0
         self.v = 0.0
 
-    @property
-    def _beta1(self) -> float:
-        return 0.95 - 0.1 * math.exp(-1e-4 * self.t)
-
-    @property
-    def _beta2(self) -> float:
-        return 0.99 - 0.1 * (self.t / (self.t + 1000.0))
-
-    @property
-    def _epsilon(self) -> float:
-        return 1e-8 + 0.01 * (1 - math.exp(-1e-6 * self.t))
-
-    def step(self, gradient: float, learning_rate=0.1) -> float:
+    def step(self, gradient: float, learning_rate = 0.1, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8) -> float:
         """
         Perform a single Adam optimization step.
         :param gradient: a float representing gradient
         :param learning_rate: Learning rate.
+        :param beta1: parameter for first moment (m: mean)
+        :param beta2: parameter for second moment (v: variance)
+        :param epsilon: parameter for the smallest step
         :return: optimized gradient
         """
         # Increment time step
         self.t += 1
         # Update biased moment estimates
-        self.m = self._beta1 * self.m + (1 - self._beta1) * gradient
-        self.v = self._beta2 * self.v + (1 - self._beta2) * (gradient ** 2)
+        self.m = beta1 * self.m + (1 - beta1) * gradient
+        self.v = beta2 * self.v + (1 - beta2) * (gradient ** 2)
         # Compute bias-corrected moment estimates
-        m_hat = self.m / (1 - self._beta1 ** self.t)
-        v_hat = self.v / (1 - self._beta2 ** self.t)
+        m_hat = self.m / (1 - beta1 ** self.t)
+        v_hat = self.v / (1 - beta2 ** self.t)
+        # Compute bias-corrected learning rate
+        alpha = learning_rate * math.sqrt(1 - beta2 ** self.t) / (1 - beta1 ** self.t)
         # Compute step
-        step = learning_rate * m_hat / (math.sqrt(v_hat) + self._epsilon)
+        step = alpha * m_hat / (math.sqrt(v_hat) + epsilon)
         # return optimized gradient
         return step

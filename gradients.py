@@ -81,16 +81,11 @@ class Scalar:
     def _compute_gradient(self):
         pass
 
-    def _aggregate_gradient(self, alpha: float):
-        self.gradient_overall = alpha * (self.gradient_overall or self.gradient) + (1 - alpha) * self.gradient
-
-    def _optimize_gradient(self, learning_rate: float):
-        self.gradient_optimized = self.adam_optimizer.step(self.gradient_overall, learning_rate)
-
-    def _back_propagate(self, alpha: float, learning_rate: float):
+    def _back_propagate(self, alpha: float, learning_rate: float, beta1: float, beta2: float, epsilon: float):
         self._compute_gradient()
-        self._aggregate_gradient(alpha)
-        self._optimize_gradient(learning_rate)
+        self.gradient_overall = alpha * (self.gradient_overall or self.gradient) + (1 - alpha) * self.gradient
+        # self.gradient_optimized = self.adam_optimizer.step(self.gradient_overall, learning_rate, beta1, beta2, epsilon)
+        self.gradient_optimized = learning_rate * self.gradient_overall
 
     def _clear_topology(self):
         self._topology.clear()
@@ -103,18 +98,21 @@ class Scalar:
                 self._build_depth_first_topology(operand)
             self._topology.append(scalar)
 
-    def back_propagate(self, alpha = 0.5, learning_rate = 0.1):
+    def back_propagate(self, alpha = 0.5, learning_rate = 0.1, beta1=0.9, beta2=0.999, epsilon=1e-8):
         """
         Applies back propagation to compute gradient of this and the previous operand scalars
         :param alpha: contribution factor of the current gradient to overall
-        :param learning_rate: Learning rate for gradient descent.
+        :param learning_rate: Learning rate for gradient optimization
+        :param beta1: adam optimizer first moment parameter
+        :param beta2: adam optimizer second moment parameter
+        :param epsilon: adam optimizer the smallest step parameter
         """
         self.clear_gradient()
         self._clear_topology()
         self._build_depth_first_topology(self)
         self.gradient = 1.0
         for s in reversed(self._topology):
-            s._back_propagate(alpha, learning_rate)
+            s._back_propagate(alpha, learning_rate, beta1, beta2, epsilon)
 
     def clear_gradient(self):
         """

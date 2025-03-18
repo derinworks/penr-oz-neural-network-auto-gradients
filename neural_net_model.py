@@ -243,7 +243,7 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         return activation, cost
 
     def train(self, training_data: list[Tuple[Vector, Vector]], epochs=100, learning_rate=0.01, decay_rate=0.9,
-              dropout_rate=0.2, l2_lambda=0.001):
+              dropout_rate=0.2, l2_lambda=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8):
         """
         Train the neural network using the provided training data.
         :param training_data: List of tuples [(input_vector, target_vector), ...].
@@ -252,6 +252,9 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         :param decay_rate: Decay rate of learning rate for finer gradient descent
         :param dropout_rate: Fraction of neurons to drop during training for hidden layers
         :param l2_lambda: L2 regularization strength
+        :param beta1: adam optimizer first moment parameter
+        :param beta2: adam optimizer second moment parameter
+        :param epsilon: adam optimizer the smallest step parameter
         """
         # Combine incoming training data with buffered data
         self.training_data_buffer.extend(training_data)
@@ -284,7 +287,7 @@ class NeuralNetworkModel(MultiLayerPerceptron):
                 # calculate contribution factor for averaging
                 alpha = 1.0 / (i + 2)
                 # back propagate to populate gradients
-                cost.back_propagate(alpha, current_learning_rate)
+                cost.back_propagate(alpha, current_learning_rate, beta1, beta2, epsilon)
                 # calculate average cost
                 avg_cost = alpha * (avg_cost or cost.value) + (1 - alpha) * cost.value
 
