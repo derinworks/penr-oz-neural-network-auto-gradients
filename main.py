@@ -151,6 +151,21 @@ class TrainingRequest(ModelRequest):
         examples=[0.001],
         description="The L2 Lambda penalty reducing weight magnitude during backpropagation"
     )
+    adam_beta1: float = Field(
+        0.9,
+        examples=[0.9],
+        description="The Adam optimizer parameter for gradient mean optimization after backpropagation"
+    )
+    adam_beta2: float = Field(
+        0.999,
+        examples=[0.999],
+        description="The Adam optimizer parameter for gradient variance optimization after backpropagation"
+    )
+    adam_epsilon: float = Field(
+        1e-8,
+        examples=[1e-8],
+        description="The Adam optimizer parameter for smallest step for gradient optimization after backpropagation"
+    )
 
 
 class ModelIdQuery(Query):
