@@ -20,14 +20,6 @@ class TestNeuralNetModel(unittest.TestCase):
         self.assertIsNotNone(neuron.bias)
         self.assertEqual(activation_algo, neuron.activation_algo)
 
-    def test_neuron_clear_gradients(self):
-        neuron = Neuron(1)
-        neuron.bias.gradient = 1.0
-
-        neuron.clear_gradients()
-
-        self.assertEqual(0.0, neuron.bias.gradient)
-
     def test_neuron_activate(self):
         neuron = Neuron(2)
         input_vector = Vector([1.0, 2.0])
@@ -48,14 +40,6 @@ class TestNeuralNetModel(unittest.TestCase):
         self.assertIsNotNone(layer)
         self.assertEqual(output_size, len(layer.neurons))
         self.assertEqual(input_size, len(layer.neurons[0].weights.scalars))
-
-    def test_layer_clear_gradients(self):
-        layer = Layer(1, 1)
-        layer.neurons[0].bias.gradient = 1.0
-
-        layer.clear_gradients()
-
-        self.assertEqual(0.0, layer.neurons[0].bias.gradient)
 
     def test_layer_activate(self):
         layer = Layer(2, 4)
@@ -78,14 +62,6 @@ class TestNeuralNetModel(unittest.TestCase):
 
         self.assertIsNotNone(multi_layer_perceptron)
         self.assertEqual(len(multi_layer_perceptron.layers), len(layer_sizes) - 1)
-
-    def test_multi_layer_perceptron_clear_gradients(self):
-        multi_layer_perceptron = MultiLayerPerceptron([1, 1])
-        multi_layer_perceptron.layers[0].neurons[0].bias.gradient = 1.0
-
-        multi_layer_perceptron.clear_gradients()
-
-        self.assertEqual(0.0, multi_layer_perceptron.layers[0].neurons[0].bias.gradient)
 
     def test_multi_layer_perceptron_activate(self):
         multi_layer_perceptron = MultiLayerPerceptron([2, 4, 2])

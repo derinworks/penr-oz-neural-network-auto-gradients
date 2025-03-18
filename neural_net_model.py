@@ -30,14 +30,6 @@ class Neuron:
         self.bias = Scalar(0) if bias_algo == "zeros" else Scalar(random.uniform(-1, 1))
         self.activation_algo = activation_algo
 
-    def clear_gradients(self):
-        """
-        Clears gradients that were populated after a back propagation run
-        """
-        self.weights.clear_gradients()
-        self.bias.visited = False
-        self.bias.gradient = 0.0
-
     def output(self, input_vector: Vector) -> Scalar:
         """
         Gives output of this neuron pre-activation for given input.
@@ -67,13 +59,6 @@ class Layer:
         self.neurons = [Neuron(input_size, weight_algo, bias_algo, activation_algo)
                         for _ in range(output_size)]
         self.activation_algo = activation_algo
-
-    def clear_gradients(self):
-        """
-        Clears gradients that were populated after a back propagation run
-        """
-        for neuron in self.neurons:
-            neuron.clear_gradients()
 
     def output(self, input_vector: Vector) -> Vector:
         """
@@ -111,13 +96,6 @@ class MultiLayerPerceptron:
         self.layers = [Layer(input_size, output_size, weight_algo, bias_algo, activation_algo)
                        for input_size, output_size, activation_algo in
                        zip(input_sizes, output_sizes, activation_algos)]
-
-    def clear_gradients(self):
-        """
-        Clears gradients that were populated after a back propagation run
-        """
-        for layer in self.layers:
-            layer.clear_gradients()
 
     def activate(self, input_vector: Vector) -> Vector:
         """
@@ -303,8 +281,6 @@ class NeuralNetworkModel(MultiLayerPerceptron):
             avg_cost = None
             for i, (input_vector, target_vector) in enumerate(training_data_sample):
                 _, cost = self.compute_output(input_vector, target_vector, dropout_rate)
-                # clear gradients
-                self.clear_gradients()
                 # calculate contribution factor for averaging
                 alpha = 1.0 / (i + 2)
                 # back propagate to populate gradients
