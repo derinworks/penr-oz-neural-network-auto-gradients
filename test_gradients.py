@@ -176,21 +176,6 @@ class TestGradients(unittest.TestCase):
 
         self.assertEqual("Unsupported activation algorithm: b0gU2", str(ve.exception))
 
-    def test_clear_gradients(self):
-        scalar = Scalar(1.0)
-        scalar.visited = True
-        scalar.gradient = 1.0
-        scalar.gradient_overall = 1.0
-        scalar.gradient_optimized = 0.1
-        vector = Vector([scalar])
-
-        vector.clear_gradients()
-
-        self.assertFalse(scalar.visited)
-        self.assertEqual(0.0, scalar.gradient)
-        self.assertEqual(1.0, scalar.gradient_overall)
-        self.assertEqual(0.1, scalar.gradient_optimized)
-
     @parameterized.expand([
         (Vector([-1.5, 0.2, 2.0]).batch_norm(), [-1.2129, -0.0233, 1.2362]),
         (Vector([-1.5, 0.2, 2.0]).apply_dropout(0.99999), [0.0, 0.0, 0.0]),
@@ -213,15 +198,15 @@ class TestGradients(unittest.TestCase):
     @parameterized.expand([
         (Scalar(1.0), [1.0]),
         (Scalar(1.0) + 2.0, [1.0, 1.0, 1.0]),
-        (Scalar(-2.0) * 4.0, [1.0, 4.0, -2.0]),
-        (Scalar(-2.0) * (Scalar(-6.0) + 10.0), [1.0, 4.0, -2.0, -2.0, -2.0]),
-        (Scalar(-2.0) * (Scalar(10.0) + (Scalar(2.0) * -3)), [1.0, 4.0, -2.0, -2.0, -2.0, 6.0, -4.0]),
-        (Scalar(2)**3 + 1, [1.0, 1.0, 12.0, 0.0, 1.0]),
+        (Scalar(-2.0) * 4.0, [1.0, -2.0, 4.0]),
+        (Scalar(-2.0) * (Scalar(-6.0) + 10.0), [1.0, -2.0, -2.0, -2.0, 4.0]),
+        (Scalar(-2.0) * (Scalar(10.0) + (Scalar(2.0) * -3)), [1.0, -2.0, -2.0, -4.0, 6.0, -2.0, 4.0]),
+        (Scalar(2)**3 + 1, [1.0, 1.0, 1.0, 0.0, 12.0]),
         (Scalar(1.0).activate("sigmoid"), [1.0, 0.1966]),
         ((3 * Scalar(-2) + 1).activate("relu"), [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
         ((Scalar(2) + 1).activate("relu"), [1.0, 1.0, 1.0, 1.0]),
         (Scalar(1.0).activate("tanh"), [1.0, 0.42]),
-        (Vector([-1.5, 0.2]).activate("softmax").calculate_cost(Vector([0.2, 0.8])), [1.0, 0.3078, -0.2922]),
+        (Vector([-1.5, 0.2]).activate("softmax").calculate_cost(Vector([0.2, 0.8])), [1.0, -0.2922, 0.3078]),
     ])
     def test_scalar_back_propagate(self, result: Scalar, expected: list[float]):
         actual: list[Scalar] = []
@@ -229,22 +214,29 @@ class TestGradients(unittest.TestCase):
         def dfs(scalar):
             if scalar not in scalar_set:
                 scalar_set.add(scalar)
-                actual.append(scalar)
                 for operand in scalar.operands:
                     dfs(operand)
+                actual.append(scalar)
         dfs(result)
 
         result.back_propagate()
 
         self.assertEqual(len(expected), len(actual))
-        for i, (e, a) in enumerate(zip(expected, actual)):
+        for i, (e, a) in enumerate(zip(expected, reversed(actual))):
             self.assertAlmostEqual(e, a.gradient, 4, f"Element at index {i}")
             self.assertAlmostEqual(e, a.gradient_overall, 4, f"Element at index {i}")
             self.assertGreaterEqual(e * a.gradient_optimized, 0) # same sign
 
         result.clear_gradient()
+
+        for i, (e, a) in enumerate(zip(expected, reversed(actual))):
+            self.assertEqual(0.0, a.gradient, f"Element at index {i}")
+            self.assertAlmostEqual(e, a.gradient_overall, 4, f"Element at index {i}")
+            self.assertGreaterEqual(e * a.gradient_optimized, 0) # same sign
+
         result.back_propagate()
-        for i, (e, a) in enumerate(zip(expected, actual)):
+
+        for i, (e, a) in enumerate(zip(expected, reversed(actual))):
             self.assertAlmostEqual(e, a.gradient, 4, f"Element at index {i}")
             self.assertAlmostEqual(e, a.gradient_overall, 4, f"Element at index {i}")
 

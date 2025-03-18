@@ -12,10 +12,11 @@ class Scalar:
         self.value = value
         self.operands: Tuple[Scalar, ...] = operands
         self.gradient = 0.0
-        self.visited = False
         self.gradient_overall = None
         self.gradient_optimized = None
         self.adam_optimizer = AdamOptimizer()
+        self._topology: list[Scalar] = []
+        self._visited_set: set[Scalar] = set()
 
     def __repr__(self):
         return f"{type(self).__name__}({self.value}, gradient={self.gradient})"
@@ -87,13 +88,20 @@ class Scalar:
         self.gradient_optimized = self.adam_optimizer.step(self.gradient_overall, learning_rate)
 
     def _back_propagate(self, alpha: float, learning_rate: float):
-        if not self.visited:
-            self.visited = True
-            self._compute_gradient()
-            self._aggregate_gradient(alpha)
-            self._optimize_gradient(learning_rate)
-            for operand in self.operands:
-                operand._back_propagate(alpha, learning_rate)
+        self._compute_gradient()
+        self._aggregate_gradient(alpha)
+        self._optimize_gradient(learning_rate)
+
+    def _clear_topology(self):
+        self._topology.clear()
+        self._visited_set.clear()
+
+    def _build_depth_first_topology(self, scalar):
+        if scalar not in self._visited_set:
+            self._visited_set.add(scalar)
+            for operand in scalar.operands:
+                self._build_depth_first_topology(operand)
+            self._topology.append(scalar)
 
     def back_propagate(self, alpha = 0.5, learning_rate = 0.1):
         """
@@ -101,15 +109,19 @@ class Scalar:
         :param alpha: contribution factor of the current gradient to overall
         :param learning_rate: Learning rate for gradient descent.
         """
+        self.clear_gradient()
+        self._clear_topology()
+        self._build_depth_first_topology(self)
         self.gradient = 1.0
-        self._back_propagate(alpha, learning_rate)
+        for s in reversed(self._topology):
+            s._back_propagate(alpha, learning_rate)
 
     def clear_gradient(self):
-        if self.visited or self.gradient != 0.0:
-            self.visited = False
-            self.gradient = 0.0
-            for operand in self.operands:
-                operand.clear_gradient()
+        """
+        Clears gradient of this and the previous operand scalars, if back propagated before.
+        """
+        for s in self._topology:
+            s.gradient = 0.0
 
 class Summation(Scalar):
     def __init__(self, left_addend: Scalar, right_addend: Scalar):
@@ -210,13 +222,6 @@ class Vector:
     @property
     def floats(self) -> list[float]:
         return [s.value for s in self.scalars]
-
-    def clear_gradients(self):
-        """
-        Clears gradients that were populated after a back propagation run
-        """
-        for scalar in self.scalars:
-            scalar.clear_gradient()
 
     def dot(self, other):
         """
