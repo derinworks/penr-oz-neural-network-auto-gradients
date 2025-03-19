@@ -59,7 +59,7 @@ class Scalar:
         return self * divisor**-1
 
     def __rtruediv__(self, dividend):
-        return dividend * self**1
+        return dividend * self**-1
 
     def activate(self, algo: str):
         """
@@ -84,8 +84,7 @@ class Scalar:
     def _back_propagate(self, alpha: float, learning_rate: float, beta1: float, beta2: float, epsilon: float):
         self._compute_gradient()
         self.gradient_overall = alpha * (self.gradient_overall or self.gradient) + (1 - alpha) * self.gradient
-        # self.gradient_optimized = self.adam_optimizer.step(self.gradient_overall, learning_rate, beta1, beta2, epsilon)
-        self.gradient_optimized = learning_rate * self.gradient_overall
+        self.gradient_optimized = self.adam_optimizer.step(self.gradient_overall, learning_rate, beta1, beta2, epsilon)
 
     def _clear_topology(self):
         self._topology.clear()
