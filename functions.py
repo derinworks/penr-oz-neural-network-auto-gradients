@@ -16,8 +16,7 @@ def sigmoid_derivative(x: float) -> float:
     :param x: an input
     :return: Derivative of sigmoid activation
     """
-    sig = sigmoid(x) if x < 0 or x > 1 else x
-    return sig * (1 - sig)
+    return x * (1 - x)
 
 def relu(x: float) -> float:
     """
@@ -61,7 +60,7 @@ def mean_squared_error(x, y):
     :param y: second
     :return: the mean squared error between x to y
     """
-    return sum([(yi - xi) ** 2 for xi, yi in zip(x, y)])
+    return sum([(yi - xi) ** 2 for xi, yi in zip(x, y)]) / len(x)
 
 def softmax(x: list[float]) -> list[float]:
     """
@@ -88,7 +87,7 @@ def cross_entropy_gradient(x: float, y: float) -> float:
     :param y: an expected output (a probability value).
     :return: Gradient of the loss with respect to the logit.
     """
-    return x - y
+    return y - x
 
 def cross_entropy_loss(x: list[float], y: list[float]) -> float:
     """
@@ -101,7 +100,7 @@ def cross_entropy_loss(x: list[float], y: list[float]) -> float:
     eps = 1e-12
     x = [max(min(p, 1 - eps), eps) for p in x]
     # Compute cross-entropy loss
-    return -sum(math.log(xi) * yi for xi, yi in zip(x, y))
+    return -sum(yi * math.log(xi) for xi, yi in zip(x, y))
 
 def batch_norm(x: list[float], epsilon=1e-5):
     """

@@ -187,7 +187,7 @@ class TestGradients(unittest.TestCase):
             self.assertAlmostEqual(e, a, 4, f"Element at index {i}")
 
     @parameterized.expand([
-        (Vector([-1.5, 0.2, 2.0]), [0.0, 0.5, 1.0], 3.34),
+        (Vector([-1.5, 0.2, 2.0]), [0.0, 0.5, 1.0], 1.1133),
         (Vector([-1.5, 0.2, 2.0]).activate("softmax"), [0.2, 0.3, 0.5], 1.4186),
     ])
     def test_vector_calculate_cost(self, vector: Vector, target: list[float], expected: float):
@@ -206,7 +206,7 @@ class TestGradients(unittest.TestCase):
         ((3 * Scalar(-2) + 1).activate("relu"), [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
         ((Scalar(2) + 1).activate("relu"), [1.0, 1.0, 1.0, 1.0]),
         (Scalar(1.0).activate("tanh"), [1.0, 0.42]),
-        (Vector([-1.5, 0.2]).activate("softmax").calculate_cost(Vector([0.2, 0.8])), [1.0, -0.2922, 0.3078]),
+        (Vector([-1.5, 0.2]).activate("softmax").calculate_cost(Vector([0.2, 0.8])), [1.0, 0.2922, -0.3078]),
     ])
     def test_scalar_back_propagate(self, result: Scalar, expected: list[float]):
         actual: list[Scalar] = []
