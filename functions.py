@@ -61,7 +61,7 @@ def mean_squared_error(x, y):
     :param y: second
     :return: the mean squared error between x to y
     """
-    return sum([(xi - yi) ** 2 for xi, yi in zip(x, y)])
+    return sum([(yi - xi) ** 2 for xi, yi in zip(x, y)])
 
 def softmax(x: list[float]) -> list[float]:
     """
