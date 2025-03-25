@@ -126,6 +126,7 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         self.training_data_buffer: list[Tuple[Vector, Vector]] = []
         self.training_buffer_size = self._calculate_buffer_size(layer_sizes)
         self.training_sample_size = int(self.training_buffer_size * 0.1) # sample 10% of buffer
+        self.avg_cost = None
 
     @staticmethod
     def _calculate_buffer_size(layer_sizes: list[int]) -> int:
@@ -166,6 +167,7 @@ class NeuralNetworkModel(MultiLayerPerceptron):
             } for l in self.layers],
             "progress": self.progress,
             "training_data_buffer": [tuple(tv.floats for tv in ttv) for ttv in self.training_data_buffer],
+            "average_cost": self.avg_cost,
         }
 
     def set_model_data(self, model_data: dict):
@@ -178,6 +180,7 @@ class NeuralNetworkModel(MultiLayerPerceptron):
 
         self.progress = model_data["progress"]
         self.training_data_buffer = [tuple(Vector(t) for t in tt) for tt in model_data["training_data_buffer"]]
+        self.avg_cost = model_data["average_cost"]
 
     def serialize(self):
         filepath = f"model_{self.model_id}.json"
@@ -313,6 +316,15 @@ class NeuralNetworkModel(MultiLayerPerceptron):
             # Serialize model after 10 secs while training
             if time.time() - last_serialized >= 10:
                 self.serialize()
+
+        # Calculate current average progress cost
+        avg_progress_cost = sum([progress["cost"] for progress in self.progress]) / len(self.progress)
+        # Update overall average cost
+        self.avg_cost = ((self.avg_cost or avg_progress_cost) + avg_progress_cost) / 2.0
+        # Log training result
+        training_dt = dt.now().isoformat()
+        print(f"Model {self.model_id}: {training_dt} - Done training for {epochs} epochs, "
+               f"Cost: {avg_progress_cost:.4f} Overall Cost: {self.avg_cost:.4f}")
 
         # Serialize model after training
         self.serialize()
