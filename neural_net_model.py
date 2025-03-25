@@ -11,7 +11,7 @@ from gradients import Scalar, Vector
 log = logging.getLogger(__name__)
 
 class Neuron:
-    def __init__(self, input_size: int, weight_algo="xavier", bias_algo="random", activation_algo="relu"):
+    def __init__(self, input_size: int = 0, weight_algo="xavier", bias_algo="random", activation_algo="relu"):
         """
         Initialize a neuron
         :param input_size: represents the input size of neuron
@@ -47,7 +47,7 @@ class Neuron:
         return self.output(input_vector).activate(self.activation_algo)
 
 class Layer:
-    def __init__(self, input_size: int, output_size: int, weight_algo="xavier", bias_algo="random", activation_algo="relu"):
+    def __init__(self, input_size: int = 0, output_size: int = 0, weight_algo="xavier", bias_algo="random", activation_algo="relu"):
         """
         Initialize a layer of neurons
         :param input_size: represents the input size of layer
@@ -97,20 +97,6 @@ class MultiLayerPerceptron:
                        for input_size, output_size, activation_algo in
                        zip(input_sizes, output_sizes, activation_algos)]
 
-    def activate(self, input_vector: Vector) -> Vector:
-        """
-        Activates this multi-layer perceptron with given input.
-        :param input_vector: an input vector
-        :return: activated output vector
-        """
-        # no layers means output same as input
-        output_vector = input_vector
-        for layer in self.layers:
-            # feed forward output of each layer
-            output_vector = layer.activate(output_vector)
-        # output of final layer
-        return output_vector
-
 class NeuralNetworkModel(MultiLayerPerceptron):
     def __init__(self, model_id, layer_sizes: list[int], weight_algo="xavier", bias_algo="random", activation_algos=None):
         """
@@ -124,20 +110,15 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         self.model_id = model_id
         self.progress = []
         self.training_data_buffer: list[Tuple[Vector, Vector]] = []
-        self.training_buffer_size = self._calculate_buffer_size(layer_sizes)
-        self.training_sample_size = int(self.training_buffer_size * 0.1) # sample 10% of buffer
+        self.training_buffer_size: int = self.num_params
         self.avg_cost = None
 
-    @staticmethod
-    def _calculate_buffer_size(layer_sizes: list[int]) -> int:
+    @property
+    def num_params(self) -> int:
         """
-        Calculate training data buffer size based on total number of parameters in the network.
+        :return: Number of model parameters
         """
-        total_params = sum(
-            layer_size * next_layer_size + next_layer_size
-            for layer_size, next_layer_size in zip(layer_sizes[:-1], layer_sizes[1:])
-        )
-        return total_params  # Buffer size is equal to total parameters
+        return sum([len(n.weights.scalars) + 1 for l in self.layers for n in l.neurons])
 
     @classmethod
     def _get_scalar_state(cls, scalar: Scalar) -> dict:
@@ -171,15 +152,18 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         }
 
     def set_model_data(self, model_data: dict):
-        for layer, layer_state in zip(self.layers, model_data["layers"]):
-            layer.activation_algo = layer_state["algo"]
-            for neuron, neuron_state in zip(layer.neurons, layer_state["neurons"]):
-                neuron.activation_algo = layer_state["algo"]
+        for layer_state in model_data["layers"]:
+            layer = Layer(activation_algo=layer_state["algo"])
+            self.layers.append(layer)
+            for neuron_state in layer_state["neurons"]:
+                neuron = Neuron(activation_algo=layer_state["algo"])
+                layer.neurons.append(neuron)
                 neuron.weights = Vector([self._get_scalar(w) for w in neuron_state["weights"]])
                 neuron.bias = self._get_scalar(neuron_state["bias"])
 
         self.progress = model_data["progress"]
         self.training_data_buffer = [tuple(Vector(t) for t in tt) for tt in model_data["training_data_buffer"]]
+        self.training_buffer_size = self.num_params
         self.avg_cost = model_data["average_cost"]
 
     def serialize(self):
@@ -201,10 +185,7 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         except FileNotFoundError as e:
             log.error(f"File not found error occurred: {str(e)}")
             raise KeyError(f"Model {model_id} not created yet.")
-        layer_state = model_data["layers"]
-        input_size = len(layer_state[0]["neurons"][0]["weights"])
-        layer_sizes = [input_size] + [len(l["neurons"]) for l in layer_state]
-        model = cls(model_id, layer_sizes)
+        model = cls(model_id, [])
         model.set_model_data(model_data)
         return model
 
@@ -217,11 +198,11 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         except FileNotFoundError as e:
             log.warning(f"Failed to delete: {str(e)}")
 
-    def compute_output(self, input_vector: Vector, target_vector: Vector = None, dropout_rate=0.0) -> Tuple[Vector, Scalar | None]:
+    def compute_output(self, input_vector: Vector, target: Vector = None, dropout_rate=0.0) -> Tuple[Vector, Scalar]:
         """
         Compute activated output and optionally also cost compared to the provided target vector.
         :param input_vector: Input vector
-        :param target_vector: Target vector (optional)
+        :param target: Target vector (optional)
         :param dropout_rate: Fraction of neurons to drop during training for hidden layers (optional)
         :return: activation vector, cost, gradients
         """
@@ -239,9 +220,8 @@ class NeuralNetworkModel(MultiLayerPerceptron):
                 activation.apply_dropout(dropout_rate)
 
         cost = None
-        if target_vector is not None:
-            cost_scalar: Scalar = activation.calculate_cost(target_vector)
-            cost = cost_scalar
+        if target is not None:
+            cost = activation.calculate_cost(target)
 
         return activation, cost
 
@@ -270,6 +250,9 @@ class NeuralNetworkModel(MultiLayerPerceptron):
             self.serialize() # serialize model with partial training data for next time
             return
 
+        # Calculate sample size
+        training_sample_size = int(self.training_buffer_size * 0.1)  # sample 10% of buffer
+
         # Proceed with training using combined data if buffer size is sufficient
         training_data = self.training_data_buffer
         self.training_data_buffer = []  # Clear buffer
@@ -278,7 +261,7 @@ class NeuralNetworkModel(MultiLayerPerceptron):
         last_serialized = time.time()
         for epoch in range(epochs):
             random.shuffle(training_data)
-            training_data_sample = training_data[:self.training_sample_size]
+            training_data_sample = training_data[:training_sample_size]
 
             # decay learning rate
             current_learning_rate = learning_rate * (decay_rate ** epoch)
@@ -304,14 +287,13 @@ class NeuralNetworkModel(MultiLayerPerceptron):
                         w.value *= (1.0 - l2_lambda)
 
             # Record progress
+            progress_dt, progress_cost = dt.now().isoformat(), avg_cost
             self.progress.append({
-                "dt": dt.now().isoformat(),
+                "dt": progress_dt,
                 "epoch": epoch + 1,
-                "cost": avg_cost
+                "cost": progress_cost
             })
-            last_progress = self.progress[-1]
-            print(f"Model {self.model_id}: {last_progress["dt"]} - Epoch {last_progress["epoch"]}, "
-                  f"Cost: {last_progress["cost"]:.4f} ")
+            print(f"Model {self.model_id}: {progress_dt} - Epoch {epoch + 1}, Cost: {progress_cost:.4f}")
 
             # Serialize model after 10 secs while training
             if time.time() - last_serialized >= 10:
