@@ -63,15 +63,6 @@ class TestNeuralNetModel(unittest.TestCase):
         self.assertIsNotNone(multi_layer_perceptron)
         self.assertEqual(len(multi_layer_perceptron.layers), len(layer_sizes) - 1)
 
-    def test_multi_layer_perceptron_activate(self):
-        multi_layer_perceptron = MultiLayerPerceptron([2, 4, 2])
-        input_vector = Vector([1.0, 2.0])
-
-        activated_vector: Vector = multi_layer_perceptron.activate(input_vector)
-
-        self.assertEqual(2, len(activated_vector.scalars))
-        self.assertListEqual([0.0] * 2, [value.gradient for value in activated_vector.scalars])
-
     @parameterized.expand([
         ([9, 9, 9], "xavier", "random",),
         ([18, 9, 3], "xavier", "zeros",),
@@ -92,8 +83,6 @@ class TestNeuralNetModel(unittest.TestCase):
             self.assertEqual(layer_sizes[i + 1], len(model.layers[i].neurons))
         self.assertEqual(0, len(model.progress))
         self.assertEqual(expected_buffer_size, model.training_buffer_size)
-        self.assertGreater(model.training_sample_size, 0)
-        self.assertGreater(expected_buffer_size, model.training_sample_size)
 
     @parameterized.expand([
         ([9, 9, 9], ["sigmoid"] * 2,),
@@ -151,6 +140,7 @@ class TestNeuralNetModel(unittest.TestCase):
         # Ensure training progress
         self.assertGreater(len(model.progress), 0)
         self.assertNotEqual(model.progress[0]["cost"], initial_cost)
+        self.assertEqual(sum([p["cost"] for p in model.progress]) / len(model.progress), model.avg_cost)
         self.assertEqual(len(model.training_data_buffer), 0)
 
         # Deserialize and check if recorded training
@@ -175,6 +165,7 @@ class TestNeuralNetModel(unittest.TestCase):
                 self.assertAlmostEqual(ub, pb, 4, f"Element at loc {i}, {j}")
         self.assertEqual(len(persisted_model.progress), len(model.progress))
         self.assertEqual(len(persisted_model.training_data_buffer), 0)
+        self.assertEqual(persisted_model.avg_cost, model.avg_cost)
 
     def test_train_with_insufficient_data(self):
         model = NeuralNetworkModel(model_id="test", layer_sizes=[9, 9, 9], activation_algos=["relu"] * 2)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 
 from fastapi import FastAPI, HTTPException, Body, Request
@@ -30,35 +32,35 @@ EXAMPLES = [
         "target_vector":     [0, 0, 0, 0, 1, 0, 0, 0, 0]
     },
     {
-        "activation_vector": [0, 0, 0, 0,.5, 0, 0, 0, 0],
+        "activation_vector": [0, 0, 0, 0,-1, 0, 0, 0, 0],
         "target_vector":     [1, 0, 0, 0, 0, 0, 0, 0, 0]
     },
     {
-        "activation_vector": [1, 0, 0, 0,.5, 0, 0, 0, 0],
+        "activation_vector": [1, 0, 0, 0,-1, 0, 0, 0, 0],
         "target_vector":     [0, 1, 0, 0, 0, 0, 0, 0, 0]
     },
     {
-        "activation_vector": [1,.5, 0, 0,.5, 0, 0, 0, 0],
+        "activation_vector": [1,-1, 0, 0,-1, 0, 0, 0, 0],
         "target_vector":     [0, 0, 0, 0, 0, 0, 0, 1, 0]
     },
     {
-        "activation_vector": [1,.5, 0, 0,.5, 0, 0, 1, 0],
+        "activation_vector": [1,-1, 0, 0,-1, 0, 0, 1, 0],
         "target_vector":     [0, 0, 1, 0, 0, 0, 0, 0, 0]
     },
     {
-        "activation_vector": [1,.5,.5, 0,.5, 0, 0, 1, 0],
+        "activation_vector": [1,-1,-1, 0,-1, 0, 0, 1, 0],
         "target_vector":     [0, 0, 0, 0, 0, 0, 1, 0, 0]
     },
     {
-        "activation_vector": [1,.5,.5, 0,.5, 0, 1, 1, 0],
+        "activation_vector": [1,-1,-1, 0,-1, 0, 1, 1, 0],
         "target_vector":     [0, 0, 0, 0, 0, 0, 0, 0, 1]
     },
     {
-        "activation_vector": [1,.5,.5, 0,.5, 0, 1, 1,.5],
+        "activation_vector": [1,-1,-1, 0,-1, 0, 1, 1,-1],
         "target_vector":     [0, 0, 0, 1, 0, 0, 0, 0, 0]
     },
     {
-        "activation_vector": [1,.5,.5, 1,.5, 0, 1, 1,.5],
+        "activation_vector": [1,-1,-1, 1,-1, 0, 1, 1,-1],
         "target_vector":     [0, 0, 0, 0, 0, 1, 0, 0, 0]
     },
 ]
@@ -237,7 +239,8 @@ async def train_model(body: TrainingRequest = Body(...)):
 def model_progress(model_id: str = ModelIdQuery(...)):
     model = NeuralNetworkModel.deserialize(model_id)
     return {
-        "progress": model.progress
+        "progress": model.progress,
+        "average_cost": model.avg_cost,
     }
 
 
